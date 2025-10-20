@@ -3,6 +3,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import authRoutes from "./auth/routes";
+import eventsRoutes from "./events/routes";
 import { requireAuth } from "./auth/middleware";
 import { prisma } from "./db";
 
@@ -27,6 +28,8 @@ app.get("/api/me", requireAuth, async (req, res) => {
   if (!me) return res.status(404).json({ error: "Not found" });
   res.json({ id: me.id, email: me.email, name: me.name, pictureUrl: me.pictureUrl });
 });
+
+app.use("/api/events", eventsRoutes);
 
 app.listen(PORT, () => {
   console.log(`Backend listening on http://localhost:${PORT}`);
