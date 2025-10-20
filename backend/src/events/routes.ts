@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { requireAuth } from "../auth/middleware";
 import { prisma } from "../db";
-import { fetchAndStoreEvents } from "../googleCalendar";
+import { google } from "googleapis";
+import { fetchAndStoreEvents, getAuthorizedClientForUser } from "../googleCalendar";
 
 
 const router = Router();
@@ -60,7 +61,7 @@ router.get("/", requireAuth, async (req, res) => {
     return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
   };
 
-//* IF range is 30 we group events by weeks.
+  //* IF range is 30 we group events by weeks.
   if (range === 30) {
     const byWeek: Record<string, any[]> = {};
     for (const e of events) {
@@ -88,5 +89,83 @@ router.get("/", requireAuth, async (req, res) => {
   return res.json({ range, grouping: "day", groups: result });
 });
 
+
+
+router.post("/", requireAuth, async (req, res) => {
+  try {
+    const userId = req.auth!.userId;
+    const { title, date, startTime, endTime } = req.body;
+
+    if (!title || !date || !startTime || !endTime) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    //* merge date and time (e.g. "2025-10-20" + "14:00")
+    const start = new Date(`${date}T${startTime}:00`);
+    const end = new Date(`${date}T${endTime}:00`);
+
+
+    const existing = await prisma.event.findFirst({
+      where: { userId, title, start, end },
+    });
+
+    if (existing) {
+      //* If exists, return existing event without the insert on google
+      return res.status(200).json({
+        ok: true,
+        event: existing,
+        deduped: true,
+      });
+    }
+
+    //* Create new event on the google calendar
+    const auth = await getAuthorizedClientForUser(userId);
+    const calendar = google.calendar({ version: "v3", auth });
+
+    const { data: gEvent } = await calendar.events.insert({
+      calendarId: "primary",
+      requestBody: {
+        summary: title,
+        start: { dateTime: start.toISOString() },
+        end: { dateTime: end.toISOString() },
+      },
+    });
+
+    //* Save evend in DB
+    let dbEvent;
+    try {
+      dbEvent = await prisma.event.create({
+        data: {
+          userId,
+          googleEventId: gEvent.id!,
+          title,
+          start,
+          end,
+        },
+      });
+    } catch (err: any) {
+      //* If somebody by any chance creates the same event -> Prisma P2002 (unique constraint)
+      if (err.code === "P2002") {
+        const existing = await prisma.event.findFirst({
+          where: { userId, title, start, end },
+        });
+        return res.status(200).json({
+          ok: true,
+          event: existing,
+          deduped: true,
+        });
+      }
+      throw err;
+    }
+
+    return res.status(201).json({
+      ok: true,
+      event: dbEvent,
+    });
+  } catch (e: any) {
+    console.error("POST /api/events error:", e);
+    return res.status(500).json({ ok: false, error: "Failed to create event" });
+  }
+});
 
 export default router;

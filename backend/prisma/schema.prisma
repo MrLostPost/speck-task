@@ -35,5 +35,6 @@ model Event {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([userId, title, start, end])
   @@index([userId, start])
 }
