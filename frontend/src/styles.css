@@ -1,0 +1,30 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background-color: #7aa2b9;
+}
+
+button,
+input {
+  padding: 8px 10px;
+}
+
+input {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+button {
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: .6;
+  cursor: default;
+}
